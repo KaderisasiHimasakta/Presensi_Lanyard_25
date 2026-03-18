@@ -2,222 +2,133 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LANYARD ATTENDANCE AKTUARIA 2025</title>
-  
+  <title>Attendance App</title>
+
+  <!-- Google API -->
+  <script src="https://apis.google.com/js/api.js"></script>
+
   <style>
-    /* Tambahkan CSS yang sama seperti sebelumnya */
+    body { font-family: Arial; max-width: 500px; margin: auto; }
+    button { padding: 10px; margin: 5px 0; width: 100%; }
+    video, canvas { width: 100%; margin-top: 10px; }
   </style>
 </head>
+
 <body>
-  <div class="container">
-    <h2>📋 LANYARD ATTENDANCE AKTUARIA 2025</h2>
-    
-    <!-- Permission Help -->
-    <div class="permission-help">
-      <strong>Note:</strong> Please allow camera & location permissions when prompted.
-      If blocked, click the lock/camera icon in address bar and change to "Allow".
-    </div>
-    
-    <!-- Student Info -->
-    <div class="form-group">
-      <label for="nim">Student ID</label>
-      <input type="text" id="nim" placeholder="Enter Student ID" required>
-    </div>
-    
-    <div class="form-group">
-      <label for="name">Full Name</label>
-      <input type="text" id="name" placeholder="Enter your full name" required>
-    </div>
-    
-    <div class="form-group">
-      <label for="status">Attendance Status</label>
-      <select id="status">
-        <option value="Present">Present</option>
-        <option value="Absent">Absent</option>
-      </select>
-    </div>
-    
-    <!-- Camera Section -->
-    <div class="video-container">
-      <button class="btn btn-primary" onclick="startCamera()" id="cameraBtn">
-        Start Camera
-      </button>
-      
-      <video id="video" playsinline autoplay muted></video>
-      <canvas id="canvas"></canvas>
-      
-      <button class="btn btn-warning" onclick="takePhoto()" id="photoBtn" disabled>
-        Take Photo
-      </button>
-    </div>
-    
-    <!-- Location Section -->
-    <button class="btn btn-primary" onclick="getLocation()" id="locationBtn">
-      Get Location
-    </button>
-    
-    <div id="locationInfo" class="location-info">
-      Location not captured yet
-    </div>
-    
-    <!-- Status Indicators -->
-    <div class="status-indicator">
-      <div class="status-item">
-        <div class="status-dot" id="studentStatus"></div>
-        <span>Student Info</span>
-      </div>
-      <div class="status-item">
-        <div class="status-dot" id="photoStatus"></div>
-        <span>Photo</span>
-      </div>
-      <div class="status-item">
-        <div class="status-dot" id="locationStatus"></div>
-        <span>Location</span>
-      </div>
-    </div>
-    
-    <!-- Submit Button -->
-    <button class="btn btn-success" onclick="submitAttendance()" id="submitBtn" disabled>
-      Submit Attendance
-    </button>
-    
-    <!-- Status Messages -->
-    <div id="message"></div>
-  </div>
 
-  <script>
-    // Ganti dengan ID client Anda dari Google Cloud Platform
-    const CLIENT_ID = '263655892688-hjtrv5mqn11hbeiafmniujb1cdj9d69h.apps.googleusercontent.com';
-    const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
-    const SPREADSHEET_ID = 'https://docs.google.com/spreadsheets/d/15fpGJVmrqUyKLGXZmGG9npmgyefknz2Iu7zm43DwtRk/edit?usp=sharing';
-    const SHEET_NAME = 'Sheet1'; // Ganti dengan nama sheet yang Anda inginkan
+<h2>Attendance</h2>
 
-    let cameraStream = null;
-    let photoTaken = false;
-    let locationData = null;
-    let accessToken;
+<button onclick="loginGoogle()">Login Google</button>
 
-    document.addEventListener('DOMContentLoaded', function() {
-      console.log('Page loaded');
-      
-      // Add event listeners for form validation
-      document.getElementById('nim').addEventListener('input', updateUI);
-      document.getElementById('name').addEventListener('input', updateUI);
-      
-      updateUI();
-    });
+<input id="nim" placeholder="NIM"><br>
+<input id="name" placeholder="Nama"><br>
 
-    function updateUI() {
-      const nim = document.getElementById('nim').value.trim();
-      const name = document.getElementById('name').value.trim();
-      
-      // Update status dots
-      document.getElementById('studentStatus').className = 
-        'status-dot' + (nim && name ? ' ready' : '');
-      
-      document.getElementById('photoStatus').className = 
-        'status-dot' + (photoTaken ? ' ready' : '');
-      
-      document.getElementById('locationStatus').className = 
-        'status-dot' + (locationData ? ' ready' : '');
-      
-      // Enable/disable submit button
-      const canSubmit = nim && name && photoTaken && locationData;
-      document.getElementById('submitBtn').disabled = !canSubmit;
+<button onclick="startCamera()">Start Camera</button>
+<video id="video" autoplay></video>
+<canvas id="canvas"></canvas>
+<button onclick="takePhoto()">Take Photo</button>
+
+<button onclick="getLocation()">Get Location</button>
+<p id="locationText">No location</p>
+
+<button onclick="submitAttendance()">Submit</button>
+
+<p id="msg"></p>
+
+<script>
+const CLIENT_ID = "263655892688-hjtrv5mqn11hbeiafmniujb1cdj9d69h.apps.googleusercontent.com";
+const SPREADSHEET_ID = "15fpGJVmrqUyKLGXZmGG9npmgyefknz2Iu7zm43DwtRk";
+
+let stream;
+let locationData;
+let photoTaken = false;
+
+// INIT GOOGLE API
+gapi.load("client:auth2", async () => {
+  await gapi.client.init({
+    clientId: CLIENT_ID,
+    discoveryDocs: ["https://sheets.googleapis.com/$discovery/rest?version=v4"],
+    scope: "https://www.googleapis.com/auth/spreadsheets"
+  });
+});
+
+// LOGIN
+function loginGoogle() {
+  gapi.auth2.getAuthInstance().signIn()
+    .then(() => show("Login sukses"))
+    .catch(err => show("Login gagal"));
+}
+
+// CAMERA
+async function startCamera() {
+  stream = await navigator.mediaDevices.getUserMedia({ video: true });
+  document.getElementById("video").srcObject = stream;
+}
+
+function takePhoto() {
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("canvas");
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  canvas.getContext("2d").drawImage(video, 0, 0);
+  photoTaken = true;
+}
+
+// LOCATION
+function getLocation() {
+  navigator.geolocation.getCurrentPosition(pos => {
+    locationData = {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude
+    };
+    document.getElementById("locationText").innerText =
+      locationData.lat + ", " + locationData.lng;
+  });
+}
+
+// SUBMIT
+async function submitAttendance() {
+  if (!gapi.auth2.getAuthInstance().isSignedIn.get()) {
+    show("Login dulu");
+    return;
+  }
+
+  if (!photoTaken || !locationData) {
+    show("Lengkapi foto & lokasi");
+    return;
+  }
+
+  const nim = document.getElementById("nim").value;
+  const name = document.getElementById("name").value;
+
+  const photo = document.getElementById("canvas").toDataURL();
+
+  await gapi.client.sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: "Sheet1!A:F",
+    valueInputOption: "RAW",
+    resource: {
+      values: [[
+        nim,
+        name,
+        new Date().toLocaleString(),
+        photo,
+        locationData.lat,
+        locationData.lng
+      ]]
     }
+  });
 
-    async function startCamera() {
-      // Implementasikan fungsi startCamera() seperti sebelumnya
-    }
+  show("Data masuk ke Sheets");
+}
 
-    function takePhoto() {
-      // Implementasikan fungsi takePhoto() seperti sebelumnya
-    }
+// MESSAGE
+function show(msg) {
+  document.getElementById("msg").innerText = msg;
+}
+</script>
 
-    function getLocation() {
-      // Implementasikan fungsi getLocation() seperti sebelumnya
-    }
-
-    async function getAccessToken() {
-      return new Promise((resolve, reject) => {
-        if (accessToken) {
-          resolve(accessToken);
-        } else {
-          const script = document.createElement('script');
-          script.src = `https://accounts.google.com/gapi/auth?onload=handleGoogleAuthLoad`;
-          document.body.appendChild(script);
-
-          window.handleGoogleAuthLoad = () => {
-            gapi.auth.authorize({
-              client_id: CLIENT_ID,
-              scope: SCOPES,
-              immediate: false
-            }, (authResult) => {
-              if (authResult && !authResult.error) {
-                accessToken = authResult.access_token;
-                resolve(accessToken);
-              } else {
-                reject(authResult.error);
-              }
-            });
-          };
-        }
-      });
-    }
-
-    async function submitAttendance() {
-      try {
-        const accessToken = await getAccessToken();
-
-        const nim = document.getElementById('nim').value.trim();
-        const name = document.getElementById('name').value.trim();
-        const status = document.getElementById('status').value;
-        const canvas = document.getElementById('canvas');
-        const photoData = canvas.toDataURL('image/jpeg', 0.8);
-        const latitude = locationData?.lat;
-        const longitude = locationData?.lng;
-        const accuracy = locationData?.accuracy;
-        const mapUrl = locationData?.mapUrl;
-        const timestamp = new Date().toISOString();
-
-        const data = [
-          [nim, name, status, photoData, latitude, longitude, accuracy, mapUrl, timestamp]
-        ];
-
-        const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}:append?valueInputOption=RAW`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
-          },
-          body: JSON.stringify({
-            values: data
-          })
-        });
-
-        if (response.ok) {
-          showMessage('Attendance saved!', 'success');
-          setTimeout(resetForm, 3000);
-        } else {
-          const error = await response.json();
-          showMessage(`Error saving attendance: ${error.error.message}`, 'error');
-        }
-      } catch (error) {
-        console.error('Error submitting attendance:', error);
-        showMessage('Failed to save attendance', 'error');
-      }
-    }
-
-    function resetForm() {
-      // Implementasikan fungsi resetForm() seperti sebelumnya
-    }
-
-    function showMessage(text, type) {
-      // Implementasikan fungsi showMessage() seperti sebelumnya
-    }
-
-    document.getElementById('submitBtn').addEventListener('click', submitAttendance);
-  </script>
 </body>
 </html>
