@@ -8,9 +8,24 @@
   <script src="https://apis.google.com/js/api.js"></script>
 
   <style>
-    body { font-family: Arial; max-width: 500px; margin: auto; }
-    button { padding: 10px; margin: 5px 0; width: 100%; }
-    video, canvas { width: 100%; margin-top: 10px; }
+    body {
+      font-family: Arial;
+      max-width: 500px;
+      margin: auto;
+      padding: 20px;
+    }
+
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0;
+    }
+
+    video, canvas {
+      width: 100%;
+      margin-top: 10px;
+      border: 1px solid #ccc;
+    }
   </style>
 </head>
 
@@ -18,20 +33,21 @@
 
 <h2>Attendance</h2>
 
-<button onclick="loginGoogle()">Login Google</button>
+<button onclick="login()">Login Google</button>
 
-<input id="nim" placeholder="NIM"><br>
-<input id="name" placeholder="Nama"><br>
+<input id="nim" placeholder="NIM">
+<input id="name" placeholder="Nama">
 
 <button onclick="startCamera()">Start Camera</button>
-<video id="video" autoplay></video>
-<canvas id="canvas"></canvas>
+<video id="video" autoplay playsinline></video>
+
 <button onclick="takePhoto()">Take Photo</button>
+<canvas id="canvas"></canvas>
 
 <button onclick="getLocation()">Get Location</button>
-<p id="locationText">No location</p>
+<p id="loc">Belum ada lokasi</p>
 
-<button onclick="submitAttendance()">Submit</button>
+<button onclick="submitData()">Submit</button>
 
 <p id="msg"></p>
 
@@ -40,7 +56,7 @@ const CLIENT_ID = "263655892688-hjtrv5mqn11hbeiafmniujb1cdj9d69h.apps.googleuser
 const SPREADSHEET_ID = "15fpGJVmrqUyKLGXZmGG9npmgyefknz2Iu7zm43DwtRk";
 
 let stream;
-let locationData;
+let locationData = null;
 let photoTaken = false;
 
 // INIT GOOGLE API
@@ -53,18 +69,32 @@ gapi.load("client:auth2", async () => {
 });
 
 // LOGIN
-function loginGoogle() {
+function login() {
   gapi.auth2.getAuthInstance().signIn()
-    .then(() => show("Login sukses"))
-    .catch(err => show("Login gagal"));
+    .then(() => show("Login berhasil"))
+    .catch(() => show("Login gagal"));
 }
 
 // CAMERA
 async function startCamera() {
-  stream = await navigator.mediaDevices.getUserMedia({ video: true });
-  document.getElementById("video").srcObject = stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user" }
+    });
+
+    const video = document.getElementById("video");
+    video.srcObject = stream;
+
+    await video.play();
+
+    show("Kamera aktif");
+  } catch (err) {
+    console.error(err);
+    show("Kamera error: " + err.message);
+  }
 }
 
+// FOTO
 function takePhoto() {
   const video = document.getElementById("video");
   const canvas = document.getElementById("canvas");
@@ -73,23 +103,30 @@ function takePhoto() {
   canvas.height = video.videoHeight;
 
   canvas.getContext("2d").drawImage(video, 0, 0);
+
   photoTaken = true;
+  show("Foto diambil");
 }
 
-// LOCATION
+// LOKASI
 function getLocation() {
   navigator.geolocation.getCurrentPosition(pos => {
     locationData = {
       lat: pos.coords.latitude,
       lng: pos.coords.longitude
     };
-    document.getElementById("locationText").innerText =
+
+    document.getElementById("loc").innerText =
       locationData.lat + ", " + locationData.lng;
+
+    show("Lokasi didapat");
+  }, err => {
+    show("Gagal ambil lokasi");
   });
 }
 
 // SUBMIT
-async function submitAttendance() {
+async function submitData() {
   if (!gapi.auth2.getAuthInstance().isSignedIn.get()) {
     show("Login dulu");
     return;
@@ -105,28 +142,33 @@ async function submitAttendance() {
 
   const photo = document.getElementById("canvas").toDataURL();
 
-  await gapi.client.sheets.spreadsheets.values.append({
-    spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!A:F",
-    valueInputOption: "RAW",
-    resource: {
-      values: [[
-        nim,
-        name,
-        new Date().toLocaleString(),
-        photo,
-        locationData.lat,
-        locationData.lng
-      ]]
-    }
-  });
+  try {
+    await gapi.client.sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "Sheet1!A:F",
+      valueInputOption: "RAW",
+      resource: {
+        values: [[
+          nim,
+          name,
+          new Date().toLocaleString(),
+          photo,
+          locationData.lat,
+          locationData.lng
+        ]]
+      }
+    });
 
-  show("Data masuk ke Sheets");
+    show("Data berhasil masuk ke Sheets");
+  } catch (err) {
+    console.error(err);
+    show("Gagal kirim data");
+  }
 }
 
 // MESSAGE
-function show(msg) {
-  document.getElementById("msg").innerText = msg;
+function show(text) {
+  document.getElementById("msg").innerText = text;
 }
 </script>
 
